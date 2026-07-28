@@ -272,7 +272,9 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
 .boot-screen[data-collapse="on"] .boot-tear-2 { animation-delay: 0.2s; }
 .boot-screen[data-collapse="on"] .boot-tear-3 { animation-delay: 0.4s; }
 .boot-screen[data-collapse="on"] .boot-scanline { animation: collapseScan 2.5s linear forwards; }
-.boot-screen[data-collapse="on"] .enter-btn { animation: collapseBtn 2.5s ease-in forwards; }
+.boot-screen[data-collapse="on"] .enter-btn {
+  animation: collapseBtn 2.5s ease-out forwards;
+}
 
 @keyframes collapseRoot {
   0%   { transform: translate(0,0) rotate(0) scale(1); }
