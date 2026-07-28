@@ -103,6 +103,7 @@ export default function Roadmap() {
   const modeRef = useRef<Mode>('idle');
   const rafRef = useRef<number | null>(null);
   const dimsRef = useRef({ cardW: 0, step: 0, minX: 0, maxX: 0, wrapW: 0 });
+  const lastBaseIdxRef = useRef(-1);
 
   const measure = () => {
     const wrap = wrapRef.current;
@@ -121,12 +122,19 @@ export default function Roadmap() {
     Math.max(0, Math.min(PHASES.length - 1, Math.floor((dimsRef.current.maxX - x) / dimsRef.current.step + (1 - threshold))));
 
   // Pure visual update — never writes the track's `x`, only per-card effects.
-  // On mobile: only update active + adjacent cards, with reduced 3D math and no z/blur.
-  const updateFx = (x: number) => {
+  // NEVER calls setActive — dragging is DOM-only. React state changes only on snap complete / button click.
+  // On mobile: only update active + adjacent cards, with reduced 3D math, no z/blur/glow.
+  // Caches last base index to skip recomputation when dragging within the same card.
+  const updateFx = (x: number, force = false) => {
     const { cardW, step, wrapW, maxX } = dimsRef.current;
     const center = wrapW / 2;
     const mobile = mobileRef.current;
     const baseIdx = Math.round((maxX - x) / step);
+
+    // Mobile cache: skip recomputation if same card and not snapping
+    if (mobile && !force && lastBaseIdxRef.current === baseIdx && modeRef.current !== 'snap') return;
+    lastBaseIdxRef.current = baseIdx;
+
     const indices = mobile
       ? [baseIdx - 1, baseIdx, baseIdx + 1].filter((i) => i >= 0 && i < PHASES.length)
       : PHASES.map((_, i) => i);
@@ -142,7 +150,6 @@ export default function Roadmap() {
         fx.scale(1 - n * 0.06);
         fx.opacity(1 - n * 0.45);
         fx.rot(n * 4.5 * (isLeft ? -1 : 1));
-        fx.glow(`${(n * 0.16).toFixed(3)}`);
       } else {
         fx.scale(1 - n * 0.12);
         fx.opacity(1 - n * 0.45);
@@ -150,10 +157,6 @@ export default function Roadmap() {
         fx.blur(`blur(${(n * 3).toFixed(2)}px)`);
         fx.glow(`${(n * 0.16).toFixed(3)}`);
         fx.z((1 - n) * 60);
-      }
-      if (n < 0.5 && activeRef.current !== i) {
-        activeRef.current = i;
-        setActive(i);
       }
     });
   };
@@ -170,11 +173,12 @@ export default function Roadmap() {
       current: targetXRef.current,
       duration: mobile ? 0.5 : 0.9,
       ease: mobile ? 'power2.out' : 'power3.out',
-      onUpdate: () => { gsap.set(track, { x: xRef.current }); updateFx(xRef.current); },
+      onUpdate: () => { gsap.set(track, { x: xRef.current }); updateFx(xRef.current, true); },
       onComplete: () => {
         snapTweenRef.current = null;
         modeRef.current = 'idle';
         if (activeRef.current !== idx) { activeRef.current = idx; setActive(idx); }
+        lastBaseIdxRef.current = idx;
         sectionRef.current?.classList.remove('rm-dragging');
       },
     });
@@ -189,6 +193,12 @@ export default function Roadmap() {
 
     const isMobile = window.matchMedia('(pointer: coarse)').matches;
     mobileRef.current = isMobile;
+
+    // Preload all roadmap images so the browser doesn't decode during swipe
+    PHASES.forEach((p) => {
+      const img = new Image();
+      img.src = p.image;
+    });
 
     fxRef.current = cardEls.current.map((card) => {
       if (!card) return null;
@@ -387,7 +397,7 @@ function RoadmapCard({ phase, active }: { phase: Phase; active: boolean }) {
       }}>
       {/* image hero */}
       <div className="rm-img-wrap relative h-[65%] w-full overflow-hidden">
-        <img src={phase.image} alt={phase.title} loading="lazy"
+        <img src={phase.image} alt={phase.title} loading="eager"
           className={`rm-img h-full w-full object-cover ${active ? 'rm-img-active' : ''}`}
           style={{ objectPosition: 'center 20%' }} />
         <div className="rm-scanlines pointer-events-none absolute inset-0" />
@@ -573,6 +583,14 @@ function RoadmapStyles() {
   .rm-bg-aurora { filter: blur(40px) !important; }
   .rm-bg-grid { animation: none !important; }
   .rm-enter-sector { position: static !important; justify-content: flex-end !important; padding-top: 8px !important; }
+
+  /* Bullet text always visible — no entrance animation on mobile */
+  .rm-bullet {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
 
   /* Disable hover-only effects — touch devices don't hover */
   .rm-card:hover .rm-img { transform: none !important; }
