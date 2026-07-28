@@ -277,18 +277,59 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
 }
 
 @keyframes collapseRoot {
-  0%   { transform: translate(0,0) rotate(0) scale(1); }
-  10%  { transform: translate(-1px,1px) rotate(0.05deg) scale(1.005); }
-  20%  { transform: translate(2px,-1px) rotate(-0.08deg) scale(1.01); }
-  30%  { transform: translate(-2px,2px) rotate(0.1deg) scale(1.015); }
-  40%  { transform: translate(3px,-2px) rotate(-0.14deg) scale(1.02); }
-  50%  { transform: translate(-3px,2px) rotate(0.16deg) scale(1.025); }
-  60%  { transform: translate(4px,-3px) rotate(-0.2deg) scale(1.03); }
-  70%  { transform: translate(-4px,3px) rotate(0.22deg) scale(1.035); }
-  80%  { transform: translate(5px,-4px) rotate(-0.26deg) scale(1.04); }
-  88%  { transform: translate(-5px,4px) rotate(0.28deg) scale(1.045); opacity: 0.85; }
-  94%  { transform: translate(6px,-5px) rotate(-0.3deg) scale(1.05); opacity: 0.5; }
-  100% { transform: translate(0,0) rotate(0) scale(1.06); opacity: 0; }
+  0% {
+    transform: translate(0,0) rotate(0) scale(1);
+    opacity: 1;
+  }
+
+  10% {
+    transform: translate(-1px,1px) rotate(.05deg) scale(1.005);
+  }
+
+  20% {
+    transform: translate(2px,-1px) rotate(-.08deg) scale(1.01);
+  }
+
+  30% {
+    transform: translate(-2px,2px) rotate(.1deg) scale(1.015);
+  }
+
+  40% {
+    transform: translate(3px,-2px) rotate(-.14deg) scale(1.02);
+  }
+
+  50% {
+    transform: translate(-3px,2px) rotate(.16deg) scale(1.025);
+  }
+
+  60% {
+    transform: translate(4px,-3px) rotate(-.2deg) scale(1.03);
+  }
+
+  70% {
+    transform: translate(-4px,3px) rotate(.22deg) scale(1.035);
+    opacity: .92;
+  }
+
+  82% {
+    transform: translate(5px,-4px) rotate(-.26deg) scale(1.04);
+    opacity: .72;
+  }
+
+  90% {
+    transform: translate(-5px,4px) rotate(.28deg) scale(1.045);
+    opacity: .42;
+  }
+
+  96% {
+    transform: translate(6px,-5px) rotate(-.3deg) scale(1.05);
+    opacity: .12;
+  }
+
+  100% {
+    transform: translate(0,0) rotate(0) scale(1.06);
+    opacity: 0;
+  }
 }
 
 @keyframes collapseBg {
