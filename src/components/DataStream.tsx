@@ -19,6 +19,7 @@ export default function DataStream() {
 
     let raf = 0;
     let last = 0;
+    let running = false;
 
     const onResize = () => {
       w = canvas.width = canvas.offsetWidth;
@@ -49,10 +50,32 @@ export default function DataStream() {
         drops[i]++;
       }
     };
-    raf = requestAnimationFrame(draw);
+
+    const start = () => {
+      if (running) return;
+      running = true;
+      raf = requestAnimationFrame(draw);
+    };
+    const stop = () => {
+      if (!running) return;
+      running = false;
+      cancelAnimationFrame(raf);
+    };
+
+    // Pause rendering whenever the canvas is off-screen; resume when visible.
+    // The canvas itself stays alive (not destroyed/recreated).
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) (e.isIntersecting ? start : stop)();
+      },
+      { threshold: 0 },
+    );
+    obs.observe(canvas);
+    start();
 
     return () => {
-      cancelAnimationFrame(raf);
+      obs.disconnect();
+      stop();
       window.removeEventListener('resize', onResize);
     };
   }, []);

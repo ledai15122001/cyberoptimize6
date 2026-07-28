@@ -53,7 +53,7 @@ export default function App() {
           <MiniStats />
         </div>
         <About />
-        <CrewDatabase />
+        <CrewDatabase booted={booted} />
         <DirectionalParallaxTransition>
           <Tokenomics />
           <CyberpsychoMeter />

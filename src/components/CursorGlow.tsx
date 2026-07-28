@@ -6,6 +6,8 @@ export default function CursorGlow() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Touch devices: skip the effect entirely — no RAF loop, no listeners.
+    if (window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) return;
     let raf = 0;
     let tx = 0, ty = 0, cx = 0, cy = 0;
 

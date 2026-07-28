@@ -515,23 +515,33 @@ function useCrewEngine(
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════════ */
 
-export default function CrewDatabase() {
+export default function CrewDatabase({ booted = true }: { booted?: boolean }) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const sceneRefs = useRef<(HTMLDivElement | null)[]>([]);
   const textRefs = useRef<(HTMLElement | null)[][]>([]);
   const refsPool = useRef<SceneRefs[]>([]);
 
-  // Preload and decode all 7 crew portraits on mount so their textures
-  // are resident in the browser's decoded-image cache before the user can
-  // scroll. This eliminates decode / texture-upload stalls during reverse
-  // scrolling — the DOM <img> elements pick up the already-decoded image.
+  // Preload and decode crew portraits so their textures are resident in the
+  // browser's decoded-image cache before the user can scroll. Decoding is
+  // deferred until the loading screen has finished and staggered (one portrait
+  // every ~250ms) to avoid CPU contention with the boot sequence on slower
+  // devices. Desktop visuals are unchanged — the images simply arrive in the
+  // cache a little later, which is invisible to the user.
   useEffect(() => {
-    CREW.forEach((m) => {
+    if (!booted) return;
+    let i = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const decodeNext = () => {
+      if (i >= CREW.length) return;
       const img = new Image();
-      img.src = m.img;
+      img.src = CREW[i].img;
       img.decode().catch(() => {});
-    });
-  }, []);
+      i += 1;
+      if (i < CREW.length) timer = setTimeout(decodeNext, 250);
+    };
+    timer = setTimeout(decodeNext, 250);
+    return () => clearTimeout(timer);
+  }, [booted]);
 
   useCrewEngine(sectionRef, sceneRefs, textRefs);
   useCrewBoot(sectionRef);
