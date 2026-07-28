@@ -418,10 +418,39 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
 }
 
 @keyframes collapseBtn {
-  0%   { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
-  40%  { opacity: 0.95; filter: drop-shadow(3px 0 0 rgba(255,0,200,0.6)) drop-shadow(-3px 0 0 rgba(0,240,255,0.6)); }
-  75%  { opacity: 0.7; transform: scale(1.04); filter: drop-shadow(7px 0 0 rgba(255,0,200,0.85)) drop-shadow(-7px 0 0 rgba(0,240,255,0.85)); }
-  100% { opacity: 0; transform: scale(1.08); filter: drop-shadow(12px 0 0 rgba(255,0,200,1)) drop-shadow(-12px 0 0 rgba(0,240,255,1)); }
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+
+  40% {
+    opacity: 0.95;
+    transform: scale(1.01);
+  }
+
+  75% {
+    opacity: 0.68;
+    transform: scale(1.04);
+  }
+
+  90% {
+    opacity: 0.28;
+    transform: scale(1.06);
+  }
+
+  97% {
+    opacity: 0.08;
+    transform: scale(1.07);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.08);
+    filter:
+      drop-shadow(12px 0 0 rgba(255,0,200,1))
+      drop-shadow(-12px 0 0 rgba(0,240,255,1));
+  }
 }
 
 /* ═══ Mobile-only (pointer: coarse) performance optimizations ═══
