@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState, type CSSProperties } from 'react';
 import gsap from 'gsap';
 import { Draggable } from 'gsap/Draggable';
 import { InertiaPlugin } from 'gsap/InertiaPlugin';
@@ -82,6 +82,14 @@ const PHASES: Phase[] = [
 
 const GAP = 32;
 
+const hexToRgb = (hex: string) => {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `${r}, ${g}, ${b}`;
+};
+
 type Setter = (v: number | string) => void;
 interface CardFx { scale: Setter; rot: Setter; opacity: Setter; blur: Setter; glow: Setter; z: Setter }
 type Mode = 'idle' | 'drag' | 'snap';
@@ -122,7 +130,8 @@ export default function Roadmap() {
     Math.max(0, Math.min(PHASES.length - 1, Math.floor((dimsRef.current.maxX - x) / dimsRef.current.step + (1 - threshold))));
 
   // Pure visual update — never writes the track's `x`, only per-card effects.
-  // NEVER calls setActive — dragging is DOM-only. React state changes only on snap complete / button click.
+  // NEVER calls setActive — visual transforms are DOM-only. React state (the active
+  // index) is flipped at snap start in snapTo, not here.
   // On mobile: only update active + adjacent cards, with reduced 3D math, no z/blur/glow.
   // Caches last base index to skip recomputation when dragging within the same card.
   const updateFx = (x: number, force = false) => {
@@ -168,6 +177,13 @@ export default function Roadmap() {
     snapTweenRef.current?.kill();
     targetXRef.current = posX(idx);
     modeRef.current = 'snap';
+    // Flip semantic state the instant navigation begins — not after the snap
+    // tween finishes — so the indicator, arrow disabled-state, and the active
+    // card's [data-active] all reflect the destination immediately. The visual
+    // slide is driven by GSAP below; React only owns which card is "current".
+    // RoadmapCard is memoized and decorative animations are CSS-driven off
+    // [data-active], so this setState never restarts card animations.
+    if (activeRef.current !== idx) { activeRef.current = idx; setActive(idx); }
     const mobile = mobileRef.current;
     snapTweenRef.current = gsap.to(xRef, {
       current: targetXRef.current,
@@ -177,7 +193,6 @@ export default function Roadmap() {
       onComplete: () => {
         snapTweenRef.current = null;
         modeRef.current = 'idle';
-        if (activeRef.current !== idx) { activeRef.current = idx; setActive(idx); }
         lastBaseIdxRef.current = idx;
         sectionRef.current?.classList.remove('rm-dragging');
       },
@@ -358,13 +373,22 @@ export default function Roadmap() {
         style={{ perspective: '1600px' }}>
         <div ref={trackRef} className="absolute top-0 left-0 flex h-full items-center"
           style={{ gap: `${GAP}px`, willChange: 'transform', transformStyle: 'preserve-3d' }}>
-          {PHASES.map((p, i) => (
-            <div key={i} ref={(el) => { cardEls.current[i] = el; }}
-              className="rm-card relative h-[600px] shrink-0"
-              style={{ width: 'min(80vw, 920px)', transformStyle: 'preserve-3d' }}>
-              <RoadmapCard phase={p} active={active === i} />
-            </div>
-          ))}
+          {PHASES.map((p, i) => {
+            const cardStyle = {
+              width: 'min(80vw, 920px)',
+              transformStyle: 'preserve-3d',
+            } as CSSProperties;
+            (cardStyle as Record<string, unknown>)['--card-hex'] = p.hex;
+            (cardStyle as Record<string, unknown>)['--card-rgb'] = hexToRgb(p.hex);
+            return (
+              <div key={i} ref={(el) => { cardEls.current[i] = el; }}
+                className="rm-card relative h-[600px] shrink-0"
+                data-active={active === i}
+                style={cardStyle}>
+                <RoadmapCard phase={p} />
+              </div>
+            );
+          })}
         </div>
 
         <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-24 bg-gradient-to-r from-cyber-darker to-transparent" />
@@ -382,27 +406,20 @@ export default function Roadmap() {
    ROADMAP CARD
    ═══════════════════════════════════════════════════════════════════ */
 
-function RoadmapCard({ phase, active }: { phase: Phase; active: boolean }) {
+const RoadmapCard = memo(function RoadmapCard({ phase }: { phase: Phase }) {
   const { hex, colorKey } = phase;
   const textCls = `text-cyber-${colorKey}`;
 
   return (
-    <div className="rm-card-inner clip-cyber relative h-full w-full border bg-cyber-panel/40 backdrop-blur-md"
-      style={{
-        borderColor: `${hex}40`,
-        boxShadow: active
-          ? `0 0 40px ${hex}40, 0 0 80px ${hex}20, inset 0 0 40px ${hex}10`
-          : `0 0 20px ${hex}20, inset 0 0 20px ${hex}08`,
-        transition: 'box-shadow 0.8s ease',
-      }}>
+    <div className="rm-card-inner clip-cyber relative h-full w-full border bg-cyber-panel/40 backdrop-blur-md">
       {/* image hero */}
       <div className="rm-img-wrap relative h-[65%] w-full overflow-hidden">
         <img src={phase.image} alt={phase.title} loading="eager"
-          className={`rm-img h-full w-full object-cover ${active ? 'rm-img-active' : ''}`}
+          className="rm-img h-full w-full object-cover"
           style={{ objectPosition: 'center 20%' }} />
         <div className="rm-scanlines pointer-events-none absolute inset-0" />
         <div className="rm-sweep pointer-events-none absolute inset-0" />
-        <div className="pointer-events-none absolute inset-0" style={{ boxShadow: `inset 0 0 60px ${hex}40, inset 0 0 120px ${hex}20` }} />
+        <div className="rm-img-glow pointer-events-none absolute inset-0" />
         <div className="rm-noise pointer-events-none absolute inset-0 opacity-[0.06]" />
         {[...Array(6)].map((_, k) => (
           <span key={k} className="rm-particle pointer-events-none absolute rounded-full"
@@ -410,7 +427,7 @@ function RoadmapCard({ phase, active }: { phase: Phase; active: boolean }) {
               background: hex, boxShadow: `0 0 6px ${hex}`,
               animationDelay: `${k * 1.3}s`, animationDuration: `${7 + k}s` }} />
         ))}
-        <HudCorners hex={hex} active={active} />
+        <HudCorners />
         <div className="pointer-events-none absolute left-6 top-5 font-display text-6xl font-black leading-none"
           style={{ color: `${hex}30`, textShadow: `0 0 20px ${hex}50` }}>
           {phase.phase.split(' ')[1]}
@@ -429,7 +446,7 @@ function RoadmapCard({ phase, active }: { phase: Phase; active: boolean }) {
               style={{ textShadow: `0 0 12px ${hex}80` }}>{phase.title}</h3>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`rm-status h-2.5 w-2.5 rounded-full ${active ? 'rm-status-pulse' : ''}`}
+            <span className="rm-status h-2.5 w-2.5 rounded-full"
               style={{ background: hex, boxShadow: `0 0 8px ${hex}` }} />
             <span className="font-mono text-[10px] tracking-[0.25em]" style={{ color: hex }}>{phase.status}</span>
           </div>
@@ -437,8 +454,8 @@ function RoadmapCard({ phase, active }: { phase: Phase; active: boolean }) {
 
         <ul className="mt-4 space-y-1.5">
           {phase.points.map((pt, j) => (
-            <li key={j} className={`rm-bullet flex items-start gap-2 font-body text-sm text-gray-300 ${active ? 'rm-bullet-in' : ''}`}
-              style={{ transitionDelay: `${j * 120}ms` }}>
+            <li key={j} className="rm-bullet flex items-start gap-2 font-body text-sm text-gray-300"
+              style={{ animationDelay: `${j * 120}ms` }}>
               <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full" style={{ background: hex, boxShadow: `0 0 4px ${hex}` }} />
               <span>{pt}</span>
             </li>
@@ -451,17 +468,16 @@ function RoadmapCard({ phase, active }: { phase: Phase; active: boolean }) {
       </div>
     </div>
   );
-}
+});
 
-function HudCorners({ hex, active }: { hex: string; active: boolean }) {
-  const base = 'absolute h-6 w-6 transition-all duration-500';
-  const style = { borderColor: hex, opacity: active ? 1 : 0.5, boxShadow: active ? `0 0 8px ${hex}` : 'none' };
+function HudCorners() {
+  const base = 'rm-hud-corner absolute h-6 w-6';
   return (
     <>
-      <div className={`${base} left-3 top-3 border-l-2 border-t-2`} style={style} />
-      <div className={`${base} right-3 top-3 border-r-2 border-t-2`} style={style} />
-      <div className={`${base} bottom-3 left-3 border-b-2 border-l-2`} style={style} />
-      <div className={`${base} bottom-3 right-3 border-b-2 border-r-2`} style={style} />
+      <div className={`${base} left-3 top-3 border-l-2 border-t-2`} />
+      <div className={`${base} right-3 top-3 border-r-2 border-t-2`} />
+      <div className={`${base} bottom-3 left-3 border-b-2 border-l-2`} />
+      <div className={`${base} bottom-3 right-3 border-b-2 border-r-2`} />
     </>
   );
 }
@@ -501,6 +517,7 @@ function RoadmapStyles() {
   50% { transform: translateY(-20px) translateX(6px); opacity: 0.6; }
 }
 @keyframes rmImgZoom { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes rmImgEnter { 0% { opacity: 0.45; transform: scale(0.94); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes rmSweep { 0% { transform: translateX(-120%) skewX(-15deg); } 100% { transform: translateX(220%) skewX(-15deg); } }
 @keyframes rmParticleFloat {
   0%,100% { transform: translateY(0); opacity: 0.4; }
@@ -529,8 +546,9 @@ function RoadmapStyles() {
 
 .rm-img-wrap { transform: translateZ(20px); }
 .rm-img { transition: transform 0.8s ease; }
-.rm-img-active { animation: rmImgZoom 14s ease-in-out infinite; }
 .rm-card:hover .rm-img { transform: scale(1.05); }
+/* Active image zoom — driven by data-active, not a React re-render */
+.rm-card[data-active="true"] .rm-img { animation: rmImgZoom 14s ease-in-out infinite; }
 
 .rm-scanlines {
   background: repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,0,0,0.25) 3px, rgba(0,0,0,0.25) 4px);
@@ -547,17 +565,42 @@ function RoadmapStyles() {
 }
 .rm-particle { animation: rmParticleFloat 8s ease-in-out infinite; }
 
-.rm-status-pulse { animation: rmStatusPulse 1.6s ease-in-out infinite; }
+/* Inner card glow + border — driven by --card-rgb + data-active (no React re-render) */
+.rm-card-inner {
+  border-color: rgba(var(--card-rgb), 0.25);
+  transition: box-shadow 0.8s ease;
+}
+.rm-img-glow {
+  box-shadow: inset 0 0 60px rgba(var(--card-rgb), 0.25), inset 0 0 120px rgba(var(--card-rgb), 0.125);
+  pointer-events: none;
+}
+.rm-card[data-active="true"] .rm-card-inner {
+  box-shadow: 0 0 40px rgba(var(--card-rgb), 0.25), 0 0 80px rgba(var(--card-rgb), 0.125), inset 0 0 40px rgba(var(--card-rgb), 0.06);
+}
+.rm-card:not([data-active="true"]) .rm-card-inner {
+  box-shadow: 0 0 20px rgba(var(--card-rgb), 0.125), inset 0 0 20px rgba(var(--card-rgb), 0.03);
+}
 
+/* HUD corner brackets — driven by --card-hex + data-active */
+.rm-hud-corner { border-color: var(--card-hex); transition: opacity 0.5s ease, box-shadow 0.5s ease; }
+.rm-card[data-active="true"] .rm-hud-corner { opacity: 1; box-shadow: 0 0 8px var(--card-hex); }
+.rm-card:not([data-active="true"]) .rm-hud-corner { opacity: 0.5; box-shadow: none; }
+
+/* Status LED — infinite pulse only on the active card */
+.rm-card[data-active="true"] .rm-status { animation: rmStatusPulse 1.6s ease-in-out infinite; }
+
+/* Bullets — entrance animation only on the active card */
 .rm-bullet { opacity: 0; transform: translateY(12px); }
-.rm-bullet-in { animation: rmBulletIn 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+.rm-card[data-active="true"] .rm-bullet { animation: rmBulletIn 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
 
 .rm-card { transform-style: preserve-3d; }
 .rm-card[data-active="true"]:hover .rm-card-inner { filter: brightness(1.05); }
 
 @media (prefers-reduced-motion: reduce) {
-  .rm-bg-grid, .rm-bg-aurora, .rm-bg-particle, .rm-img-active, .rm-sweep,
-  .rm-particle, .rm-status-pulse, .rm-bullet-in { animation: none !important; }
+  .rm-bg-grid, .rm-bg-aurora, .rm-bg-particle, .rm-sweep, .rm-particle { animation: none !important; }
+  .rm-card[data-active="true"] .rm-img,
+  .rm-card[data-active="true"] .rm-status,
+  .rm-card[data-active="true"] .rm-bullet { animation: none !important; }
   .rm-bullet { opacity: 1; transform: none; }
 }
 
@@ -565,12 +608,11 @@ function RoadmapStyles() {
 .rm-offscreen .rm-bg-grid,
 .rm-offscreen .rm-bg-aurora,
 .rm-offscreen .rm-bg-particle,
-.rm-offscreen .rm-img-active,
 .rm-offscreen .rm-sweep,
-.rm-offscreen .rm-particle,
-.rm-offscreen .rm-status-pulse {
-  animation-play-state: paused !important;
-}
+.rm-offscreen .rm-particle { animation-play-state: paused !important; }
+.rm-offscreen .rm-card[data-active="true"] .rm-img,
+.rm-offscreen .rm-card[data-active="true"] .rm-status,
+.rm-offscreen .rm-card[data-active="true"] .rm-bullet { animation-play-state: paused !important; }
 
 /* Mobile-only (pointer: coarse) optimizations */
 @media (pointer: coarse) {
@@ -580,9 +622,22 @@ function RoadmapStyles() {
   .rm-info-panel { height: 45% !important; padding-top: 14px !important; padding-bottom: 14px !important; }
   .rm-card-inner { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; transition: none !important; }
   .rm-scanlines { mix-blend-mode: normal !important; }
-  .rm-bg-aurora { filter: blur(40px) !important; }
   .rm-bg-grid { animation: none !important; }
   .rm-enter-sector { position: static !important; justify-content: flex-end !important; padding-top: 8px !important; }
+
+  /* Strip heavy animated decorative layers — mobile GPU is the bottleneck.
+     Keep only image, neon border, scale, opacity, slight rotation. */
+  .rm-sweep, .rm-noise, .rm-particle, .rm-bg-aurora { display: none !important; }
+
+  /* One-time entrance fade/scale instead of infinite zoom */
+  .rm-card[data-active="true"] .rm-img { animation: rmImgEnter 0.6s ease-out forwards !important; }
+
+  /* No infinite status pulse on mobile */
+  .rm-card[data-active="true"] .rm-status { animation: none !important; }
+
+  /* Single-light box-shadow instead of multi-layer glow */
+  .rm-card[data-active="true"] .rm-card-inner { box-shadow: 0 0 18px rgba(var(--card-rgb), 0.22) !important; }
+  .rm-card:not([data-active="true"]) .rm-card-inner { box-shadow: 0 0 8px rgba(var(--card-rgb), 0.10) !important; }
 
   /* Bullet text always visible — no entrance animation on mobile */
   .rm-bullet {
@@ -596,14 +651,10 @@ function RoadmapStyles() {
   .rm-card:hover .rm-img { transform: none !important; }
   .rm-card[data-active="true"]:hover .rm-card-inner { filter: none !important; }
 
-  /* Pause all decorative animations during drag/throw/snap */
-  .rm-dragging .rm-img-active,
-  .rm-dragging .rm-sweep,
-  .rm-dragging .rm-particle,
-  .rm-dragging .rm-status-pulse,
-  .rm-dragging .rm-bullet-in {
-    animation-play-state: paused !important;
-  }
+  /* Pause remaining animations during drag/throw/snap */
+  .rm-dragging .rm-card[data-active="true"] .rm-img,
+  .rm-dragging .rm-card[data-active="true"] .rm-status,
+  .rm-dragging .rm-card[data-active="true"] .rm-bullet { animation-play-state: paused !important; }
 }
 `}</style>
   );
