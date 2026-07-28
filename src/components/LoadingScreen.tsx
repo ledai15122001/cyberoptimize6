@@ -54,7 +54,7 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
         else nextDelay = 60 + Math.random() * 100;
       }
 
-      current += (target - current) * 0.18;
+      current += (target - current) * 0.20;
       if (target >= 100 && current > 99.95) current = 100;
 
       setProgress(current);
