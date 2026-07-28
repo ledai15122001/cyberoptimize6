@@ -24,6 +24,7 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
   const [collapsing, setCollapsing] = useState(false);
   const [messageIdx, setMessageIdx] = useState(0);
   const enteredRef = useRef(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Believable game-style loading: fast start, brief pause ~40%, tiny pause
   // ~75%, then clean finish. Total duration ~2.5-3s.
@@ -77,6 +78,18 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
     return () => clearInterval(id);
   }, [done]);
 
+  // Preload the enter sound once so playback starts instantly on press
+  // instead of decoding the MP3 mid-collapse (which causes a runtime hitch).
+  useEffect(() => {
+    const audio = new Audio(SOUND_URL);
+    audio.preload = 'auto';
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audioRef.current = null;
+    };
+  }, []);
+
   const finish = () => {
     if (enteredRef.current) return;
     enteredRef.current = true;
@@ -86,9 +99,12 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
   const handleEnter = () => {
     if (collapsing) return;
     setCollapsing(true);
-    const audio = new Audio(SOUND_URL);
-    audio.play().catch(() => {});
-    audio.addEventListener('ended', finish);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+      audio.addEventListener('ended', finish, { once: true });
+    }
     // Fallback in case the 'ended' event never fires.
     window.setTimeout(finish, COLLAPSE_MS + 400);
   };
@@ -318,6 +334,112 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
   40%  { opacity: 0.95; filter: drop-shadow(3px 0 0 rgba(255,0,200,0.6)) drop-shadow(-3px 0 0 rgba(0,240,255,0.6)); }
   75%  { opacity: 0.7; transform: scale(1.04); filter: drop-shadow(7px 0 0 rgba(255,0,200,0.85)) drop-shadow(-7px 0 0 rgba(0,240,255,0.85)); }
   100% { opacity: 0; transform: scale(1.08); filter: drop-shadow(12px 0 0 rgba(255,0,200,1)) drop-shadow(-12px 0 0 rgba(0,240,255,1)); }
+}
+
+/* ═══ Mobile-only (pointer: coarse) performance optimizations ═══
+   Desktop collapse animations use filter chains (blur, drop-shadow,
+   brightness, saturate) that force full-screen per-frame repaints on
+   mobile GPUs. These overrides replace them with compositor-only
+   properties (transform, opacity) while preserving identical timing
+   and feel. Desktop is completely untouched. */
+
+@media (pointer: coarse) {
+  /* ── 1. Collapse: background image ──
+     Desktop: filter chain (brightness + saturate + drop-shadow + blur) + scale + opacity
+     Mobile:  scale + opacity only — opacity fade handles the darkening */
+  .boot-screen[data-collapse="on"] .boot-bg {
+    animation: collapseBgMobile 2.5s ease-in forwards;
+    will-change: transform, opacity;
+  }
+
+  /* ── 2. Collapse: UI container ──
+     Desktop: scale + skewX + opacity + drop-shadow filter
+     Mobile:  scale + skewX + opacity only */
+  .boot-screen[data-collapse="on"] .boot-ui {
+    animation: collapseUIMobile 2.5s ease-in forwards;
+    will-change: transform, opacity;
+  }
+
+  /* ── 3. Collapse: enter button ──
+     Desktop: opacity + scale + drop-shadow filter
+     Mobile:  opacity + scale only */
+  .boot-screen[data-collapse="on"] .enter-btn {
+    animation: collapseBtnMobile 2.5s ease-in forwards;
+  }
+
+  /* ── 4. Collapse: scanline ──
+     Desktop: animates top (layout-triggering)
+     Mobile:  uses transform: translateY (compositor-only) */
+  .boot-screen[data-collapse="on"] .boot-scanline::after {
+    top: 0;
+    animation: collapseScanMoveMobile 2.5s linear forwards;
+  }
+
+  /* ── 5. Film grain ──
+     Desktop: mix-blend-mode: overlay (per-frame full-screen compositing)
+     Mobile:  normal blend, reduced opacity */
+  .boot-grain {
+    mix-blend-mode: normal;
+    opacity: 0.3;
+  }
+  .boot-screen[data-collapse="on"] .boot-grain {
+    animation: collapseGrainMobile 2.5s ease-in forwards;
+  }
+
+  /* ── 6. Tear lines + scanline ──
+     Desktop: mix-blend-mode: screen
+     Mobile:  normal blend (removes per-frame compositing cost) */
+  .boot-tear {
+    mix-blend-mode: normal;
+  }
+  .boot-scanline::after {
+    mix-blend-mode: normal;
+  }
+
+  /* ── 7. Enter button: reduce shadow intensity, kill animated glow ──
+     Desktop: 3-layer text-shadow + 2-layer box-shadow + animated enterGlow (box-shadow)
+     Mobile:  2-layer reduced shadows, no animation (eliminates per-frame repaint) */
+  .enter-btn {
+    text-shadow: 0 0 10px rgba(0,240,255,0.7), 0 0 20px rgba(0,240,255,0.3);
+    box-shadow: 0 0 20px rgba(0,240,255,0.2), inset 0 0 20px rgba(0,240,255,0.05);
+    animation: none;
+  }
+  .enter-btn:hover {
+    text-shadow: 0 0 14px rgba(0,240,255,0.85), 0 0 28px rgba(0,240,255,0.4);
+    box-shadow: 0 0 30px rgba(0,240,255,0.35), inset 0 0 24px rgba(0,240,255,0.1);
+  }
+}
+
+/* ── Mobile-only keyframes (compositor-friendly: transform + opacity only) ── */
+
+@keyframes collapseBgMobile {
+  0%   { transform: scale(1); opacity: 1; }
+  50%  { transform: scale(1.025); opacity: 0.95; }
+  100% { transform: scale(1.08); opacity: 0; }
+}
+
+@keyframes collapseUIMobile {
+  0%   { transform: scale(1) skewX(0deg); opacity: 1; }
+  35%  { transform: scale(1.01) skewX(-1deg); opacity: 0.98; }
+  65%  { transform: scale(1.03) skewX(1.5deg); opacity: 0.9; }
+  85%  { transform: scale(1.05) skewX(1.5deg); opacity: 0.6; }
+  100% { transform: scale(1.08) skewX(0deg); opacity: 0; }
+}
+
+@keyframes collapseBtnMobile {
+  0%   { opacity: 1; transform: scale(1); }
+  75%  { opacity: 0.7; transform: scale(1.04); }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+@keyframes collapseScanMoveMobile {
+  0%   { transform: translateY(-5vh); }
+  100% { transform: translateY(105vh); }
+}
+
+@keyframes collapseGrainMobile {
+  0%, 30% { opacity: 0.3; }
+  100%    { opacity: 0.6; }
 }
 `}</style>
     </div>
