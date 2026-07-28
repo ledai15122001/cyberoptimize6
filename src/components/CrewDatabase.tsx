@@ -123,7 +123,6 @@ const IMAGE_WELL_STYLE: CSSProperties = {
 const COLOR_GRADE_STYLE: CSSProperties = {
   background:
     'linear-gradient(180deg, rgba(5,5,7,0.15) 0%, transparent 22%, transparent 62%, rgba(5,5,7,0.72) 100%), repeating-linear-gradient(115deg, transparent 0px, transparent 5px, rgba(0,240,255,0.04) 5px, rgba(0,240,255,0.04) 6px)',
-  mixBlendMode: 'screen',
 };
 
 const TOP_LABEL_STYLE: CSSProperties = { top: '14px', fontSize: '7px', letterSpacing: '0.18em' };
@@ -161,8 +160,8 @@ const META_TEXT_STYLE: CSSProperties = { color: '#FFE86A', textShadow: '0 0 5px 
 const FINAL_LAYOUT_STYLE: CSSProperties = { transform: 'translateY(-70px)', pointerEvents: 'auto' };
 const SIDE_LAYOUT_STYLE: CSSProperties = { pointerEvents: 'auto' };
 
-const TEXT_OPACITY_INIT: CSSProperties = { opacity: 0, willChange: 'transform, opacity' };
-const LED_OPACITY_INIT: CSSProperties = { opacity: 0, willChange: 'opacity' };
+const TEXT_OPACITY_INIT: CSSProperties = { opacity: 0 };
+const LED_OPACITY_INIT: CSSProperties = { opacity: 0 };
 
 /* ═══════════════════════════════════════════════════════════════════
    HELPERS
@@ -631,16 +630,16 @@ function CrewFXStyles() {
 
 /* ── The only infinite animations kept ── */
 @keyframes crewLedPulse {
-  0%,100% { opacity: 0.4; box-shadow: 0 0 3px currentColor; }
-  50% { opacity: 1; box-shadow: 0 0 6px currentColor; }
+  0%,100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 @keyframes crewHoloGlow {
-  0%,100% { box-shadow: 0 0 14px rgba(0,240,255,0.18), inset 0 0 14px rgba(0,240,255,0.08); }
-  50% { box-shadow: 0 0 22px rgba(0,240,255,0.3), inset 0 0 18px rgba(0,240,255,0.14); }
+  0%,100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 @keyframes crewFileLed {
-  0%,100% { box-shadow: 0 0 2px rgba(0,240,255,0.4); }
-  50% { box-shadow: 0 0 5px rgba(0,240,255,0.8); }
+  0%,100% { opacity: 0.5; }
+  50% { opacity: 1; }
 }
 @keyframes crewCursorBlink {
   0%, 48% { opacity: 0.85; }
@@ -696,14 +695,15 @@ function CrewFXStyles() {
     linear-gradient(#00f0ff, #00f0ff) right 8px bottom 8px / 16px 2px no-repeat;
 }
 
-/* ── Holographic edge glow ── */
-.crew-holo { position:absolute; inset:0; border:1px solid rgba(0,240,255,0.28); animation: crewHoloGlow 5s ease-in-out infinite; pointer-events:none; }
+/* ── Holographic edge glow — static box-shadow, only opacity breathes ── */
+.crew-holo { position:absolute; inset:0; border:1px solid rgba(0,240,255,0.28); box-shadow: 0 0 18px rgba(0,240,255,0.24), inset 0 0 16px rgba(0,240,255,0.11); animation: crewHoloGlow 5s ease-in-out infinite; pointer-events:none; }
 
 /* ── Animations — paused on inactive scenes, running only on active ── */
-.crew-led { animation: crewLedPulse 2s ease-in-out infinite; }
+.crew-led { box-shadow: 0 0 5px currentColor; animation: crewLedPulse 2s ease-in-out infinite; }
 .crew-file-led {
   width: 5px; height: 5px; border-radius: 9999px;
   background: #00f0ff;
+  box-shadow: 0 0 4px rgba(0,240,255,0.6);
   animation: crewFileLed 2.6s ease-in-out infinite;
 }
 
@@ -728,7 +728,6 @@ function CrewFXStyles() {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  filter: drop-shadow(0 0 5px rgba(0,240,255,0.45));
 }
 .crew-name {
   background: linear-gradient(90deg,
@@ -740,8 +739,6 @@ function CrewFXStyles() {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  filter: drop-shadow(0 0 8px rgba(0,240,255,0.28));
-  transition: filter 0.35s ease-out;
   position: relative;
 }
 
@@ -770,6 +767,9 @@ function CrewFXStyles() {
    (no crew-scene-inactive class on an ancestor). No React re-renders, no layout. */
 function useCyberGlitch(imgRef: React.RefObject<HTMLImageElement | null>) {
   useEffect(() => {
+    // drop-shadow filter animations force expensive per-frame repaints on
+    // mobile GPUs; the glitch is a desktop-only flourish.
+    if (window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) return;
     const img = imgRef.current;
     if (!img) return;
     let killed = false;
