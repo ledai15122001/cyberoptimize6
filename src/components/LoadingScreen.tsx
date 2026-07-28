@@ -340,11 +340,50 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
 }
 
 @keyframes collapseUI {
-  0%   { transform: scale(1); opacity: 1; filter: drop-shadow(0 0 0 transparent); }
-  35%  { transform: scale(1.01); opacity: 0.98; filter: drop-shadow(2px 0 0 rgba(255,0,200,0.5)) drop-shadow(-2px 0 0 rgba(0,240,255,0.5)); }
-  65%  { transform: scale(1.03) skewX(-1deg); opacity: 0.9; filter: drop-shadow(5px 0 0 rgba(255,0,200,0.7)) drop-shadow(-5px 0 0 rgba(0,240,255,0.7)); }
-  85%  { transform: scale(1.05) skewX(1.5deg); opacity: 0.6; filter: drop-shadow(8px 0 0 rgba(255,0,200,0.85)) drop-shadow(-8px 0 0 rgba(0,240,255,0.85)); }
-  100% { transform: scale(1.08) skewX(0deg); opacity: 0; filter: drop-shadow(12px 0 0 rgba(255,0,200,1)) drop-shadow(-12px 0 0 rgba(0,240,255,1)); }
+  0% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 0 0 transparent);
+  }
+
+  35% {
+    transform: scale(1.01);
+    opacity: 0.98;
+    filter:
+      drop-shadow(2px 0 0 rgba(255,0,200,0.5))
+      drop-shadow(-2px 0 0 rgba(0,240,255,0.5));
+  }
+
+  65% {
+    transform: scale(1.03) skewX(-1deg);
+    opacity: 0.88;
+    filter:
+      drop-shadow(5px 0 0 rgba(255,0,200,0.7))
+      drop-shadow(-5px 0 0 rgba(0,240,255,0.7));
+  }
+
+  82% {
+    transform: scale(1.045) skewX(1deg);
+    opacity: 0.55;
+  }
+
+  92% {
+    transform: scale(1.055);
+    opacity: 0.22;
+  }
+
+  97% {
+    transform: scale(1.06);
+    opacity: 0.08;
+  }
+
+  100% {
+    transform: scale(1.06);
+    opacity: 0;
+    filter:
+      drop-shadow(12px 0 0 rgba(255,0,200,1))
+      drop-shadow(-12px 0 0 rgba(0,240,255,1));
+  }
 }
 
 @keyframes collapseSeg {
