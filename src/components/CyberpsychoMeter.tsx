@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Brain, Zap, AlertTriangle, Activity, Cpu, Radio, Wifi,
-  ShieldCheck, Gauge, Network as NetworkIcon,
+  ShieldCheck, Gauge,
 } from 'lucide-react';
 
 const PHASES = [
@@ -11,13 +11,6 @@ const PHASES = [
   { pct: 90, label: 'Cyberpsycho', color: '#FF00A8', desc: 'Reality is a construct. There is only $CYBER.' },
   { pct: 100, label: 'FLATLINE', color: '#FF2D2D', desc: 'You\'ve become the chart. The chart is you. GG.' },
 ];
-
-/* ── stable random helpers ── */
-const rnd = (min: number, max: number) => min + Math.random() * (max - min);
-
-interface NetNode { x: number; y: number; pulseDur: number; pulseDelay: number; }
-interface NetConn { from: number; to: number; }
-interface NetPulse { conn: number; dur: number; delay: number; flashDur: number; }
 
 interface Widget {
   key: string;
@@ -58,6 +51,8 @@ const STATUS_INDICATORS = [
   { text: 'CONNECTED', x: 93, y: 64, blink: false },
 ];
 
+const BG_IMAGE = 'https://ik.imagekit.io/zznoau6lx/Cybercoin%20webp/2/wp11539425.webp';
+
 export default function CyberpsychoMeter() {
   const [level, setLevel] = useState(0);
   const [auto, setAuto] = useState(true);
@@ -87,21 +82,6 @@ export default function CyberpsychoMeter() {
   const current = [...PHASES].reverse().find((p) => level >= p.pct) ?? PHASES[0];
   const intensity = level / 100; /* 0..1 drives HUD reactivity */
 
-  /* stable network geometry */
-  const nodes = useMemo<NetNode[]>(() => Array.from({ length: 18 }, () => ({
-    x: rnd(6, 94), y: rnd(6, 94), pulseDur: rnd(2.5, 6), pulseDelay: rnd(0, 4),
-  })), []);
-  const conns = useMemo<NetConn[]>(() => Array.from({ length: 24 }, () => {
-    const from = (Math.random() * nodes.length) | 0;
-    let to = (Math.random() * nodes.length) | 0;
-    if (to === from) to = (to + 1) % nodes.length;
-    return { from, to };
-  }), [nodes.length]);
-  const pulses = useMemo<NetPulse[]>(() => Array.from({ length: 12 }, () => ({
-    conn: (Math.random() * conns.length) | 0,
-    dur: rnd(3, 8), delay: rnd(0, 8), flashDur: rnd(1.2, 2.4),
-  })), [conns.length]);
-
   /* live diagnostic values — smooth drift toward targets */
   const [vitals, setVitals] = useState(() => WIDGETS.map((w) => w.base));
   useEffect(() => {
@@ -129,9 +109,6 @@ export default function CyberpsychoMeter() {
     }, 2200);
     return () => clearInterval(id);
   }, [intensity]);
-
-  /* radar rotation period shortens with intensity (6s → 4s) */
-  const radarDur = `${(6 - intensity * 2).toFixed(2)}s`;
 
   /* waveform canvas — amplitude & frequency scale with meter */
   const waveRef = useRef<HTMLCanvasElement>(null);
@@ -175,7 +152,22 @@ export default function CyberpsychoMeter() {
 
   return (
     <section id="meter" ref={sectionRef} className="relative overflow-hidden px-5 pt-60 py-24">
-      <div data-depth="background"><HudBackground intensity={intensity} color={current.color} nodes={nodes} conns={conns} pulses={pulses} radarDur={radarDur} /></div>
+      {/* static background image + readability overlays */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage: `url(${BG_IMAGE})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+        aria-hidden
+      />
+      <div className="pointer-events-none absolute inset-0 bg-cyber-dark/70" aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: 'linear-gradient(180deg, rgba(0,240,255,0.06) 0%, transparent 40%, transparent 60%, rgba(0,240,255,0.04) 100%)' }}
+        aria-hidden
+      />
 
       <div data-depth="content" className="relative z-10 mx-auto max-w-3xl">
         <div data-depth="decorative" className="mb-12 text-center reveal-glitch">
@@ -327,99 +319,8 @@ export default function CyberpsychoMeter() {
         </div>
       ))}
 
-      <HudStyles intensity={intensity} radarDur={radarDur} />
+      <HudStyles />
     </section>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   HUD BACKGROUND — grids, aurora, network, radar, scan lines, particles
-   ═══════════════════════════════════════════════════════════════════ */
-
-function HudBackground({
-  intensity, color, nodes, conns, pulses, radarDur,
-}: {
-  intensity: number;
-  color: string;
-  nodes: NetNode[];
-  conns: NetConn[];
-  pulses: NetPulse[];
-  radarDur: string;
-}) {
-  const particles = useMemo(() => Array.from({ length: 14 }, () => ({
-    x: rnd(4, 96), y: rnd(4, 96), size: rnd(1.5, 3), dur: rnd(6, 12), delay: rnd(0, 6),
-  })), []);
-  const scans = useMemo(() => Array.from({ length: 5 }, () => {
-    const dirs = ['h', 'v', 'd'] as const;
-    return { dir: dirs[(Math.random() * 3) | 0], pos: rnd(8, 92), dur: rnd(7, 13), delay: rnd(0, 8) };
-  }), []);
-
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      {/* layered lighting — slow drifting aurora */}
-      <div className="hud-aurora"
-           style={{ background: `radial-gradient(circle at 30% 40%, ${color}22, transparent 60%)`, animationDuration: `${24 - intensity * 6}s` }} />
-      <div className="hud-aurora"
-           style={{ background: 'radial-gradient(circle at 75% 70%, rgba(255,0,168,0.10), transparent 60%)', animationDuration: '30s', animationDelay: '-6s' }} />
-      <div className="hud-aurora"
-           style={{ background: 'radial-gradient(circle at 50% 85%, rgba(57,255,20,0.06), transparent 55%)', animationDuration: '34s', animationDelay: '-12s' }} />
-
-      {/* slow drifting grid */}
-      <div className="hud-grid" style={{ animationDuration: `${40 - intensity * 10}s` }} />
-
-      {/* radar scanner — bottom-left, very subtle */}
-      <div className="hud-radar" style={{ animationDuration: radarDur }}>
-        <div className="hud-radar-ring" style={{ width: '100%', height: '100%' }} />
-        <div className="hud-radar-ring" style={{ width: '66%', height: '66%' }} />
-        <div className="hud-radar-ring" style={{ width: '33%', height: '33%' }} />
-        <div className="hud-radar-beam" style={{ animationDuration: radarDur }} />
-        <div className="hud-radar-dot" style={{ top: '28%', left: '60%' }} />
-        <div className="hud-radar-dot" style={{ top: '64%', left: '38%' }} />
-        <div className="hud-radar-dot" style={{ top: '52%', left: '72%' }} />
-      </div>
-
-      {/* network visualization */}
-      <svg className="hud-network" preserveAspectRatio="none">
-        {conns.map((c, i) => {
-          const a = nodes[c.from]; const b = nodes[c.to];
-          return <line key={i} x1={`${a.x}%`} y1={`${a.y}%`} x2={`${b.x}%`} y2={`${b.y}%`}
-                       stroke="rgba(0,240,255,0.08)" strokeWidth={1} />;
-        })}
-        {pulses.map((p, i) => {
-          const c = conns[p.conn]; const a = nodes[c.from]; const b = nodes[c.to];
-          return (
-            <circle key={i} r={2} fill="rgba(0,240,255,0.9)"
-                    style={{ animation: `hudPulseFlash ${p.flashDur}s ease-in-out ${p.delay}s infinite` }}>
-              <animate attributeName="cx" from={`${a.x}%`} to={`${b.x}%`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite" />
-              <animate attributeName="cy" from={`${a.y}%`} to={`${b.y}%`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite" />
-            </circle>
-          );
-        })}
-        {nodes.map((n, i) => (
-          <circle key={i} cx={`${n.x}%`} cy={`${n.y}%`} r={1.8} fill="rgba(0,240,255,0.45)"
-                  style={{ animation: `hudNodePulse ${n.pulseDur}s ease-in-out ${n.pulseDelay}s infinite` }} />
-        ))}
-      </svg>
-
-      {/* floating particles */}
-      {particles.map((p, i) => (
-        <span key={i} className="hud-particle"
-              style={{ left: `${p.x}%`, top: `${p.y}%`, width: p.size, height: p.size,
-                       animationDuration: `${p.dur}s`, animationDelay: `${p.delay}s` }} />
-      ))}
-
-      {/* moving scan lines */}
-      {scans.map((s, i) => (
-        <div key={i} className={`hud-scan hud-scan-${s.dir}`}
-             style={{ animationDuration: `${s.dur}s`, animationDelay: `${s.delay}s`,
-                      ...(s.dir === 'v' ? { left: `${s.pos}%` } : { top: `${s.pos}%` }) }} />
-      ))}
-
-      {/* floating HUD symbol */}
-      <div className="hud-symbol" style={{ top: '8%', right: '12%' }}>
-        <NetworkIcon className="h-4 w-4 text-cyber-cyan/15" />
-      </div>
-    </div>
   );
 }
 
@@ -441,52 +342,12 @@ function HudBrackets({ intensity }: { intensity: number }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   HUD STYLES — all keyframes + classes, scoped to this section
+   HUD STYLES — keyframes + classes for HUD widgets and indicators
    ═══════════════════════════════════════════════════════════════════ */
 
-function HudStyles({ intensity, radarDur }: { intensity: number; radarDur: string }) {
+function HudStyles() {
   return (
     <style>{`
-@keyframes hudAuroraDrift {
-  0%   { transform: translate(0, 0) scale(1); opacity: 0.5; }
-  50%  { transform: translate(40px, -30px) scale(1.15); opacity: 0.85; }
-  100% { transform: translate(-30px, 20px) scale(0.95); opacity: 0.55; }
-}
-@keyframes hudGridDrift {
-  0%   { background-position: 0 0; }
-  100% { background-position: 60px 60px; }
-}
-@keyframes hudRadarSpin {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-@keyframes hudPulseFlash {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 1; filter: drop-shadow(0 0 4px rgba(0,240,255,0.8)); }
-}
-@keyframes hudNodePulse {
-  0%, 100% { opacity: 0.25; }
-  50% { opacity: 0.75; filter: drop-shadow(0 0 3px rgba(0,240,255,0.6)); }
-}
-@keyframes hudParticleFloat {
-  0%, 100% { transform: translateY(0) translateX(0); opacity: 0.3; }
-  50% { transform: translateY(-22px) translateX(8px); opacity: 0.7; }
-}
-@keyframes hudScanH {
-  0% { transform: translateY(-20px); opacity: 0; }
-  10% { opacity: 0.5; } 90% { opacity: 0.5; }
-  100% { transform: translateY(100vh); opacity: 0; }
-}
-@keyframes hudScanV {
-  0% { transform: translateX(-20px); opacity: 0; }
-  10% { opacity: 0.45; } 90% { opacity: 0.45; }
-  100% { transform: translateX(100vw); opacity: 0; }
-}
-@keyframes hudScanD {
-  0% { transform: translateY(-20px) translateX(-10vw); opacity: 0; }
-  10% { opacity: 0.4; } 90% { opacity: 0.4; }
-  100% { transform: translateY(100vh) translateX(10vw); opacity: 0; }
-}
 @keyframes hudWidgetDrift {
   0%, 100% { transform: translate(0, 0); }
   50% { transform: translate(6px, -4px); }
@@ -503,51 +364,6 @@ function HudStyles({ intensity, radarDur }: { intensity: number; radarDur: strin
   0%, 49% { opacity: 1; }
   50%, 100% { opacity: 0; }
 }
-
-.hud-aurora { position: absolute; inset: -20%; filter: blur(80px); will-change: transform, opacity; animation: hudAuroraDrift 28s ease-in-out infinite alternate; }
-.hud-grid {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(0,240,255,0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,240,255,0.05) 1px, transparent 1px);
-  background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse at 50% 50%, black 25%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 25%, transparent 80%);
-  animation: hudGridDrift 36s linear infinite;
-}
-.hud-radar {
-  position: absolute; bottom: 8%; left: 6%;
-  width: 180px; height: 180px;
-  opacity: 0.22;
-}
-.hud-radar-ring {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  border: 1px solid rgba(0,240,255,0.2); border-radius: 50%;
-}
-.hud-radar-beam {
-  position: absolute; top: 50%; left: 50%; width: 50%; height: 1px;
-  background: linear-gradient(90deg, rgba(0,240,255,0.6), transparent);
-  transform-origin: left center;
-  animation: hudRadarSpin ${radarDur} linear infinite;
-  box-shadow: 0 0 8px rgba(0,240,255,0.4);
-}
-.hud-radar-dot {
-  position: absolute; width: 4px; height: 4px; border-radius: 50%;
-  background: rgba(0,240,255,0.7); box-shadow: 0 0 4px rgba(0,240,255,0.6);
-  animation: hudNodePulse 3s ease-in-out infinite;
-}
-.hud-network { position: absolute; inset: 0; width: 100%; height: 100%; }
-.hud-particle {
-  position: absolute; border-radius: 50%; background: rgba(0,240,255,0.5);
-  box-shadow: 0 0 6px rgba(0,240,255,0.5);
-  animation: hudParticleFloat 9s ease-in-out infinite;
-  will-change: transform, opacity;
-}
-.hud-scan { position: absolute; opacity: 0; will-change: transform, opacity; }
-.hud-scan-h { left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(0,240,255,0.18), transparent); animation-name: hudScanH; }
-.hud-scan-v { top: 0; bottom: 0; width: 1px; background: linear-gradient(180deg, transparent, rgba(0,240,255,0.16), transparent); animation-name: hudScanV; }
-.hud-scan-d { left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(0,200,255,0.14), transparent); animation-name: hudScanD; }
-.hud-symbol { position: absolute; animation: hudParticleFloat 14s ease-in-out infinite; }
 
 .hud-widget {
   animation: hudWidgetDrift 10s ease-in-out infinite;
@@ -577,8 +393,7 @@ function HudStyles({ intensity, radarDur }: { intensity: number; radarDur: strin
 .hud-blink-cursor::after { content: '_'; animation: hudBlinkCursor 1s steps(2) infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .hud-aurora, .hud-grid, .hud-radar-beam, .hud-particle, .hud-scan,
-  .hud-widget, .hud-network circle, .hud-symbol { animation: none !important; }
+  .hud-widget { animation: none !important; }
 }
 `}</style>
   );
