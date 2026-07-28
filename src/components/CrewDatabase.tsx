@@ -768,6 +768,29 @@ function CrewFXStyles() {
   animation: crewCursorBlink 1.3s steps(1) infinite;
 }
 .crew-scene-inactive .crew-cursor::after { animation-play-state: paused; }
+
+/* ── Mobile-only compositor optimizations (pointer: coarse).
+   Desktop never matches these queries, so its visuals are untouched. ── */
+@media (pointer: coarse) {
+  /* Release inactive scene compositor layers to free mobile GPU memory.
+     Active scenes (without .crew-scene-inactive) keep the base
+     will-change: transform, opacity from the .crew-scene rule above. */
+  .crew-scene-inactive { will-change: auto; }
+
+  /* Replace blend-mode multiply with a plain semi-transparent overlay —
+     avoids per-frame blend compositing on 7 scenes. */
+  .crew-card-well::after {
+    mix-blend-mode: normal;
+    background: repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,0,0,0.4) 2px, rgba(0,0,0,0.4) 3px);
+  }
+
+  /* Replace per-frame filter: drop-shadow with a static box-shadow —
+     painted once into the layer texture, no per-frame filter pass. */
+  .crew-brackets {
+    filter: none;
+    box-shadow: 0 0 6px rgba(0,240,255,0.5);
+  }
+}
     `}</style>
   );
 }
