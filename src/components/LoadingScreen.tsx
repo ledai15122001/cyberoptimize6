@@ -451,10 +451,9 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
   /* ── 3. Collapse: enter button ──
      Desktop: opacity + scale + drop-shadow filter
      Mobile:  opacity + scale only */
-  .boot-screen[data-collapse="on"] .enter-btn {
-    animation: collapseBtnMobile 2.5s ease-in forwards;
-  }
-
+.boot-screen[data-collapse="on"] .enter-btn {
+  animation: collapseBtn 2.5s ease-out forwards;
+}
   /* ── 4. Collapse: scanline ──
      Desktop: animates top (layout-triggering)
      Mobile:  uses transform: translateY (compositor-only) */
