@@ -3,14 +3,14 @@ import { useMemo } from 'react';
 /* ──────────────────────────────────────────────────────────────────────
    HowToBuyBackground — Arasaka/Militech acquisition-terminal ambient layer.
    Sits absolutely behind the section content. Pure CSS transforms/opacity.
+   Optimized for mobile GPU: static noise texture, reduced node counts,
+   lower blur radii, transform-based grid drift, stripped will-change.
    ────────────────────────────────────────────────────────────────────── */
 
 const AURORA = [
   { left: '5%', top: '15%', size: 640, color: 'rgba(0,240,255,0.10)', dur: 40, delay: 0 },
   { left: '70%', top: '18%', size: 600, color: 'rgba(255,0,168,0.09)', dur: 46, delay: -8 },
   { left: '38%', top: '60%', size: 660, color: 'rgba(0,160,255,0.08)', dur: 52, delay: -16 },
-  { left: '88%', top: '70%', size: 520, color: 'rgba(255,0,168,0.07)', dur: 42, delay: -22 },
-  { left: '18%', top: '72%', size: 480, color: 'rgba(0,200,255,0.06)', dur: 48, delay: -4 },
 ];
 
 const BINARY = [
@@ -40,29 +40,29 @@ const pick = <T,>(arr: T[]) => arr[(Math.random() * arr.length) | 0];
 
 export default function HowToBuyBackground() {
   const hexagons = useMemo<Hexagon[]>(
-    () => Array.from({ length: 14 }, () => ({
+    () => Array.from({ length: 7 }, () => ({
       x: rnd(4, 96), y: rnd(6, 94), dur: rnd(7, 14), delay: rnd(0, 8),
     })),
     [],
   );
   const particles = useMemo<Particle[]>(
-    () => Array.from({ length: 16 }, () => ({
+    () => Array.from({ length: 8 }, () => ({
       x: rnd(4, 96), y: rnd(4, 96), size: rnd(1.5, 3), dur: rnd(6, 13), delay: rnd(0, 7),
     })),
     [],
   );
   const scans = useMemo<ScanLine[]>(
-    () => Array.from({ length: 6 }, () => ({ top: rnd(4, 96), dur: rnd(8, 15), delay: rnd(0, 10) })),
+    () => Array.from({ length: 4 }, () => ({ top: rnd(4, 96), dur: rnd(8, 15), delay: rnd(0, 10) })),
     [],
   );
   const bins = useMemo<BinLine[]>(
-    () => Array.from({ length: 18 }, () => ({
+    () => Array.from({ length: 9 }, () => ({
       x: rnd(2, 94), y: rnd(2, 98), dur: rnd(6, 14), delay: rnd(0, 12), text: pick(BINARY),
     })),
     [],
   );
   const floaters = useMemo<FloatText[]>(
-    () => Array.from({ length: 14 }, () => ({
+    () => Array.from({ length: 7 }, () => ({
       x: rnd(2, 90), y: rnd(55, 105), text: pick(BINARY), dur: rnd(20, 36), delay: rnd(0, 22),
     })),
     [],
@@ -70,7 +70,7 @@ export default function HowToBuyBackground() {
 
   return (
     <div className="howto-bg" aria-hidden>
-      {/* Aurora — slow drifting fog */}
+      {/* Aurora — slow drifting fog (3 blobs, blur halved) */}
       <div className="hb-aurora-layer">
         {AURORA.map((a, i) => (
           <div
@@ -88,8 +88,10 @@ export default function HowToBuyBackground() {
         ))}
       </div>
 
-      {/* Animated grid */}
-      <div className="hb-grid" />
+      {/* Animated grid — transform-based drift instead of background-position */}
+      <div className="hb-grid-wrap">
+        <div className="hb-grid" />
+      </div>
 
       {/* Hexagon lattice */}
       <div className="hb-hexagons">
@@ -185,7 +187,7 @@ export default function HowToBuyBackground() {
         ))}
       </div>
 
-      {/* Noise texture */}
+      {/* Noise texture — static PNG tile instead of SVG feTurbulence */}
       <div className="hb-noise" aria-hidden />
 
       <style>{`
@@ -195,8 +197,8 @@ export default function HowToBuyBackground() {
   100% { transform: translate(-30px,20px) scale(0.95); opacity: 0.55; }
 }
 @keyframes hbGridDrift {
-  0%   { background-position: 0 0; }
-  100% { background-position: 60px 60px; }
+  0%   { transform: translate(0, 0); }
+  100% { transform: translate(60px, 60px); }
 }
 @keyframes hbHexPulse {
   0%, 100% { opacity: 0.08; transform: rotate(0deg) scale(1); }
@@ -231,17 +233,22 @@ export default function HowToBuyBackground() {
 .howto-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
 
 .hb-aurora-layer { position: absolute; inset: 0; }
-.hb-aurora { position: absolute; border-radius: 50%; filter: blur(80px); will-change: transform, opacity; }
+.hb-aurora { position: absolute; border-radius: 50%; filter: blur(40px); will-change: transform; }
 
+.hb-grid-wrap {
+  position: absolute; inset: 0; overflow: hidden;
+  mask-image: radial-gradient(ellipse at 50% 50%, black 25%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 25%, transparent 80%);
+}
 .hb-grid {
-  position: absolute; inset: 0;
+  position: absolute; top: -60px; left: -60px;
+  width: calc(100% + 120px); height: calc(100% + 120px);
   background-image:
     linear-gradient(rgba(0,240,255,0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0,240,255,0.05) 1px, transparent 1px);
   background-size: 60px 60px;
-  mask-image: radial-gradient(ellipse at 50% 50%, black 25%, transparent 80%);
-  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, black 25%, transparent 80%);
   animation: hbGridDrift 40s linear infinite;
+  will-change: transform;
 }
 
 .hb-hexagons { position: absolute; inset: 0; }
@@ -251,7 +258,7 @@ export default function HowToBuyBackground() {
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
   border: 1px solid rgba(0,240,255,0.12);
   animation: hbHexPulse 10s ease-in-out infinite;
-  will-change: transform, opacity;
+  will-change: transform;
 }
 
 .hb-binary { position: absolute; inset: 0; }
@@ -261,7 +268,6 @@ export default function HowToBuyBackground() {
   font-size: 9px; letter-spacing: 0.12em;
   color: rgba(0,240,255,0.22);
   animation: hbBinFlicker 7s ease-in-out infinite;
-  will-change: opacity;
 }
 
 .hb-floaters { position: absolute; inset: 0; }
@@ -270,11 +276,11 @@ export default function HowToBuyBackground() {
   font-family: 'Share Tech Mono', monospace;
   font-size: 11px; letter-spacing: 0.15em;
   color: rgba(0,240,255,0.06);
-  white-space: nowrap; filter: blur(0.5px);
+  white-space: nowrap;
   animation-name: hbFloaterRise;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
-  will-change: transform, opacity;
+  will-change: transform;
 }
 
 .hb-particles { position: absolute; inset: 0; }
@@ -283,7 +289,7 @@ export default function HowToBuyBackground() {
   background: rgba(0,240,255,0.5);
   box-shadow: 0 0 6px rgba(0,240,255,0.5);
   animation: hbParticleFloat 9s ease-in-out infinite;
-  will-change: transform, opacity;
+  will-change: transform;
 }
 
 .hb-scans { position: absolute; inset: 0; }
@@ -291,7 +297,7 @@ export default function HowToBuyBackground() {
   position: absolute; left: 0; right: 0; height: 1px;
   background: linear-gradient(90deg, transparent, rgba(0,240,255,0.2), transparent);
   animation: hbScanSweep 11s ease-in-out infinite;
-  will-change: transform, opacity;
+  will-change: transform;
 }
 
 .hb-labels { position: absolute; inset: 0; }
@@ -306,7 +312,8 @@ export default function HowToBuyBackground() {
 
 .hb-noise {
   position: absolute; inset: 0; opacity: 0.04; pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: url("/noise-tile.png");
+  background-repeat: repeat;
   mix-blend-mode: overlay;
 }
 
@@ -314,6 +321,14 @@ export default function HowToBuyBackground() {
   .howto-bg *, .howto-bg *::before, .howto-bg *::after {
     animation: none !important;
   }
+}
+
+/* Mobile GPU: strip the most paint-expensive operations */
+@media (pointer: coarse) {
+  .hb-aurora { filter: blur(24px) !important; }
+  .hb-hexagons { display: none !important; }
+  .hb-particle { box-shadow: none !important; }
+  .hb-noise { mix-blend-mode: normal !important; opacity: 0.025 !important; }
 }
 `}</style>
     </div>
