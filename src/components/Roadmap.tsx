@@ -95,6 +95,7 @@ export default function Roadmap() {
   const activeRef = useRef(0);
 
   const fxRef = useRef<(CardFx | null)[]>([]);
+  const mobileRef = useRef(false);
   const dragRef = useRef<Draggable | null>(null);
   const snapTweenRef = useRef<gsap.core.Tween | null>(null);
   const xRef = useRef(0);
@@ -116,26 +117,40 @@ export default function Roadmap() {
   };
 
   const posX = (i: number) => dimsRef.current.maxX - i * dimsRef.current.step;
-  const nearestIdx = (x: number) =>
-    Math.max(0, Math.min(PHASES.length - 1, Math.round((dimsRef.current.maxX - x) / dimsRef.current.step)));
+  const nearestIdx = (x: number, threshold = 0.5) =>
+    Math.max(0, Math.min(PHASES.length - 1, Math.floor((dimsRef.current.maxX - x) / dimsRef.current.step + (1 - threshold))));
 
   // Pure visual update — never writes the track's `x`, only per-card effects.
+  // On mobile: only update active + adjacent cards, with reduced 3D math and no z/blur.
   const updateFx = (x: number) => {
-    const { cardW, step, wrapW } = dimsRef.current;
+    const { cardW, step, wrapW, maxX } = dimsRef.current;
     const center = wrapW / 2;
-    cardEls.current.forEach((card, i) => {
+    const mobile = mobileRef.current;
+    const baseIdx = Math.round((maxX - x) / step);
+    const indices = mobile
+      ? [baseIdx - 1, baseIdx, baseIdx + 1].filter((i) => i >= 0 && i < PHASES.length)
+      : PHASES.map((_, i) => i);
+    indices.forEach((i) => {
+      const card = cardEls.current[i];
       const fx = fxRef.current[i];
       if (!card || !fx) return;
       const cardCenter = x + i * step + cardW / 2;
       const dist = Math.abs(center - cardCenter);
       const n = Math.min(1, dist / step);
       const isLeft = cardCenter < center;
-      fx.scale(1 - n * 0.12);
-      fx.opacity(1 - n * 0.45);
-      fx.rot(n * 9 * (isLeft ? -1 : 1));
-      fx.blur(`blur(${(n * 3).toFixed(2)}px)`);
-      fx.glow(`${(n * 0.16).toFixed(3)}`);
-      fx.z((1 - n) * 60);
+      if (mobile) {
+        fx.scale(1 - n * 0.06);
+        fx.opacity(1 - n * 0.45);
+        fx.rot(n * 4.5 * (isLeft ? -1 : 1));
+        fx.glow(`${(n * 0.16).toFixed(3)}`);
+      } else {
+        fx.scale(1 - n * 0.12);
+        fx.opacity(1 - n * 0.45);
+        fx.rot(n * 9 * (isLeft ? -1 : 1));
+        fx.blur(`blur(${(n * 3).toFixed(2)}px)`);
+        fx.glow(`${(n * 0.16).toFixed(3)}`);
+        fx.z((1 - n) * 60);
+      }
       if (n < 0.5 && activeRef.current !== i) {
         activeRef.current = i;
         setActive(i);
@@ -150,13 +165,18 @@ export default function Roadmap() {
     snapTweenRef.current?.kill();
     targetXRef.current = posX(idx);
     modeRef.current = 'snap';
+    const mobile = mobileRef.current;
     snapTweenRef.current = gsap.to(xRef, {
       current: targetXRef.current,
-      duration: 0.9,
-      ease: 'power3.out',
-      onUpdate: () => { gsap.set(track, { x: xRef.current }); },
-      onComplete: () => { snapTweenRef.current = null; modeRef.current = 'idle';
-        if (activeRef.current !== idx) { activeRef.current = idx; setActive(idx); } },
+      duration: mobile ? 0.5 : 0.9,
+      ease: mobile ? 'power2.out' : 'power3.out',
+      onUpdate: () => { gsap.set(track, { x: xRef.current }); updateFx(xRef.current); },
+      onComplete: () => {
+        snapTweenRef.current = null;
+        modeRef.current = 'idle';
+        if (activeRef.current !== idx) { activeRef.current = idx; setActive(idx); }
+        sectionRef.current?.classList.remove('rm-dragging');
+      },
     });
   };
 
@@ -168,6 +188,7 @@ export default function Roadmap() {
     measure();
 
     const isMobile = window.matchMedia('(pointer: coarse)').matches;
+    mobileRef.current = isMobile;
 
     fxRef.current = cardEls.current.map((card) => {
       if (!card) return null;
@@ -177,7 +198,7 @@ export default function Roadmap() {
         opacity: gsap.quickSetter(card, 'opacity'),
         blur: isMobile ? (() => {}) : gsap.quickSetter(card, 'filter'),
         glow: gsap.quickSetter(card, '--glow'),
-        z: gsap.quickSetter(card, 'z', 'px'),
+        z: isMobile ? (() => {}) : gsap.quickSetter(card, 'z', 'px'),
       } as CardFx;
     });
 
@@ -204,16 +225,20 @@ export default function Roadmap() {
     const drag = Draggable.create(track, {
       type: 'x',
       inertia: true,
-      edgeResistance: isMobile ? 0.65 : 0.92,
-      dragResistance: 0.02,
+      edgeResistance: isMobile ? 0.4 : 0.92,
+      dragResistance: isMobile ? 0.01 : 0.02,
       minimumMovement: 3,
-      throwResistance: isMobile ? 400 : 1400,
+      throwResistance: isMobile ? 200 : 1400,
       allowNativeTouchScrolling: isMobile,
       bounds: { minX: dimsRef.current.minX - 50, maxX: dimsRef.current.maxX + 50 },
-      onPress: () => { snapTweenRef.current?.kill(); snapTweenRef.current = null; modeRef.current = 'drag'; },
+      onPress: () => {
+        snapTweenRef.current?.kill(); snapTweenRef.current = null;
+        modeRef.current = 'drag';
+        if (isMobile) sectionRef.current?.classList.add('rm-dragging');
+      },
       onDrag: () => { xRef.current = gsap.getProperty(track, 'x') as number; },
       onThrowUpdate: () => { xRef.current = gsap.getProperty(track, 'x') as number; },
-      onThrowComplete: () => { modeRef.current = 'idle'; snapTo(nearestIdx(xRef.current)); },
+      onThrowComplete: () => { modeRef.current = 'idle'; snapTo(nearestIdx(xRef.current, isMobile ? 0.35 : 0.5)); },
     })[0];
     dragRef.current = drag;
 
@@ -543,11 +568,24 @@ function RoadmapStyles() {
   .rm-card { height: 440px !important; }
   .rm-img-wrap { height: 55% !important; }
   .rm-info-panel { height: 45% !important; padding-top: 14px !important; padding-bottom: 14px !important; }
-  .rm-card-inner { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .rm-card-inner { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; transition: none !important; }
   .rm-scanlines { mix-blend-mode: normal !important; }
   .rm-bg-aurora { filter: blur(40px) !important; }
   .rm-bg-grid { animation: none !important; }
   .rm-enter-sector { position: static !important; justify-content: flex-end !important; padding-top: 8px !important; }
+
+  /* Disable hover-only effects — touch devices don't hover */
+  .rm-card:hover .rm-img { transform: none !important; }
+  .rm-card[data-active="true"]:hover .rm-card-inner { filter: none !important; }
+
+  /* Pause all decorative animations during drag/throw/snap */
+  .rm-dragging .rm-img-active,
+  .rm-dragging .rm-sweep,
+  .rm-dragging .rm-particle,
+  .rm-dragging .rm-status-pulse,
+  .rm-dragging .rm-bullet-in {
+    animation-play-state: paused !important;
+  }
 }
 `}</style>
   );
