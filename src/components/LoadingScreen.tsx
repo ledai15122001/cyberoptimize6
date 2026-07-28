@@ -263,7 +263,9 @@ export default function LoadingScreen({ onEnter }: { onEnter: () => void }) {
 .boot-screen[data-collapse="on"] .boot-bg {
   animation: collapseBg 2.5s ease-out forwards;
 }
-.boot-screen[data-collapse="on"] .boot-ui { animation: collapseUI 2.5s ease-in forwards; }
+.boot-screen[data-collapse="on"] .boot-ui {
+  animation: collapseUI 2.5s ease-out forwards;
+}
 .boot-screen[data-collapse="on"] .boot-segment { animation: collapseSeg 2.5s ease-in forwards; }
 .boot-screen[data-collapse="on"] .boot-grain { animation: collapseGrain 2.5s ease-in forwards; }
 .boot-screen[data-collapse="on"] .boot-tear { animation: collapseTear 2.5s ease-in forwards; }
