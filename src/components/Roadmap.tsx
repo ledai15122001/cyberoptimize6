@@ -170,6 +170,18 @@ export default function Roadmap() {
     });
   };
 
+  // Flip data-current on the settled card via direct DOM writes — never React.
+  // React's `active` state drives only indicators/arrows (immediate); this
+  // attribute drives heavy decorative effects (glow, zoom, HUD, pulse, bullets)
+  // and is set only after the snap tween settles, so no style recalc/repaint
+  // fires mid-animation. React never re-writes it because its JSX value is a
+  // constant per card index.
+  const setCurrent = (idx: number) => {
+    cardEls.current.forEach((el, i) => {
+      if (el) el.dataset.current = i === idx ? 'true' : 'false';
+    });
+  };
+
   const snapTo = (idx: number) => {
     const track = trackRef.current;
     if (!track || dragRef.current?.isDragging) return;
@@ -177,12 +189,11 @@ export default function Roadmap() {
     snapTweenRef.current?.kill();
     targetXRef.current = posX(idx);
     modeRef.current = 'snap';
-    // Flip semantic state the instant navigation begins — not after the snap
-    // tween finishes — so the indicator, arrow disabled-state, and the active
-    // card's [data-active] all reflect the destination immediately. The visual
-    // slide is driven by GSAP below; React only owns which card is "current".
-    // RoadmapCard is memoized and decorative animations are CSS-driven off
-    // [data-active], so this setState never restarts card animations.
+    // Semantic state flips the instant navigation begins so indicators and
+    // arrow disabled-state track the destination immediately. Heavy visual
+    // effects are NOT driven by this — they wait for data-current, flipped in
+    // onComplete after the snap settles, so no style recalc/repaint fires
+    // mid-animation.
     if (activeRef.current !== idx) { activeRef.current = idx; setActive(idx); }
     const mobile = mobileRef.current;
     snapTweenRef.current = gsap.to(xRef, {
@@ -194,6 +205,7 @@ export default function Roadmap() {
         snapTweenRef.current = null;
         modeRef.current = 'idle';
         lastBaseIdxRef.current = idx;
+        setCurrent(idx);
         sectionRef.current?.classList.remove('rm-dragging');
       },
     });
@@ -232,6 +244,7 @@ export default function Roadmap() {
     targetXRef.current = startX;
     gsap.set(track, { x: startX });
     updateFx(startX);
+    setCurrent(activeRef.current);
 
     // Single rAF loop — LERPs toward target during snap, reads Draggable's x during drag/throw.
     const tick = () => {
@@ -383,7 +396,7 @@ export default function Roadmap() {
             return (
               <div key={i} ref={(el) => { cardEls.current[i] = el; }}
                 className="rm-card relative h-[600px] shrink-0"
-                data-active={active === i}
+                data-current={i === 0 ? 'true' : 'false'}
                 style={cardStyle}>
                 <RoadmapCard phase={p} />
               </div>
@@ -547,8 +560,8 @@ function RoadmapStyles() {
 .rm-img-wrap { transform: translateZ(20px); }
 .rm-img { transition: transform 0.8s ease; }
 .rm-card:hover .rm-img { transform: scale(1.05); }
-/* Active image zoom — driven by data-active, not a React re-render */
-.rm-card[data-active="true"] .rm-img { animation: rmImgZoom 14s ease-in-out infinite; }
+/* Active image zoom — driven by data-current (set after snap settles) */
+.rm-card[data-current="true"] .rm-img { animation: rmImgZoom 14s ease-in-out infinite; }
 
 .rm-scanlines {
   background: repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(0,0,0,0.25) 3px, rgba(0,0,0,0.25) 4px);
@@ -565,42 +578,43 @@ function RoadmapStyles() {
 }
 .rm-particle { animation: rmParticleFloat 8s ease-in-out infinite; }
 
-/* Inner card glow + border — driven by --card-rgb + data-active (no React re-render) */
+/* Inner card glow + border — driven by --card-rgb + data-current.
+   No box-shadow/border transition: those are repaint-heavy and would animate
+   during/after the snap. data-current flips once, post-snap, with no transition. */
 .rm-card-inner {
   border-color: rgba(var(--card-rgb), 0.25);
-  transition: box-shadow 0.8s ease;
 }
 .rm-img-glow {
   box-shadow: inset 0 0 60px rgba(var(--card-rgb), 0.25), inset 0 0 120px rgba(var(--card-rgb), 0.125);
   pointer-events: none;
 }
-.rm-card[data-active="true"] .rm-card-inner {
+.rm-card[data-current="true"] .rm-card-inner {
   box-shadow: 0 0 40px rgba(var(--card-rgb), 0.25), 0 0 80px rgba(var(--card-rgb), 0.125), inset 0 0 40px rgba(var(--card-rgb), 0.06);
 }
-.rm-card:not([data-active="true"]) .rm-card-inner {
+.rm-card:not([data-current="true"]) .rm-card-inner {
   box-shadow: 0 0 20px rgba(var(--card-rgb), 0.125), inset 0 0 20px rgba(var(--card-rgb), 0.03);
 }
 
-/* HUD corner brackets — driven by --card-hex + data-active */
-.rm-hud-corner { border-color: var(--card-hex); transition: opacity 0.5s ease, box-shadow 0.5s ease; }
-.rm-card[data-active="true"] .rm-hud-corner { opacity: 1; box-shadow: 0 0 8px var(--card-hex); }
-.rm-card:not([data-active="true"]) .rm-hud-corner { opacity: 0.5; box-shadow: none; }
+/* HUD corner brackets — driven by --card-hex + data-current */
+.rm-hud-corner { border-color: var(--card-hex); transition: opacity 0.5s ease; }
+.rm-card[data-current="true"] .rm-hud-corner { opacity: 1; box-shadow: 0 0 8px var(--card-hex); }
+.rm-card:not([data-current="true"]) .rm-hud-corner { opacity: 0.5; box-shadow: none; }
 
-/* Status LED — infinite pulse only on the active card */
-.rm-card[data-active="true"] .rm-status { animation: rmStatusPulse 1.6s ease-in-out infinite; }
+/* Status LED — infinite pulse only on the current card */
+.rm-card[data-current="true"] .rm-status { animation: rmStatusPulse 1.6s ease-in-out infinite; }
 
-/* Bullets — entrance animation only on the active card */
+/* Bullets — entrance animation only on the current card */
 .rm-bullet { opacity: 0; transform: translateY(12px); }
-.rm-card[data-active="true"] .rm-bullet { animation: rmBulletIn 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
+.rm-card[data-current="true"] .rm-bullet { animation: rmBulletIn 0.7s cubic-bezier(0.16,1,0.3,1) forwards; }
 
 .rm-card { transform-style: preserve-3d; }
-.rm-card[data-active="true"]:hover .rm-card-inner { filter: brightness(1.05); }
+.rm-card[data-current="true"]:hover .rm-card-inner { filter: brightness(1.05); }
 
 @media (prefers-reduced-motion: reduce) {
   .rm-bg-grid, .rm-bg-aurora, .rm-bg-particle, .rm-sweep, .rm-particle { animation: none !important; }
-  .rm-card[data-active="true"] .rm-img,
-  .rm-card[data-active="true"] .rm-status,
-  .rm-card[data-active="true"] .rm-bullet { animation: none !important; }
+  .rm-card[data-current="true"] .rm-img,
+  .rm-card[data-current="true"] .rm-status,
+  .rm-card[data-current="true"] .rm-bullet { animation: none !important; }
   .rm-bullet { opacity: 1; transform: none; }
 }
 
@@ -610,9 +624,9 @@ function RoadmapStyles() {
 .rm-offscreen .rm-bg-particle,
 .rm-offscreen .rm-sweep,
 .rm-offscreen .rm-particle { animation-play-state: paused !important; }
-.rm-offscreen .rm-card[data-active="true"] .rm-img,
-.rm-offscreen .rm-card[data-active="true"] .rm-status,
-.rm-offscreen .rm-card[data-active="true"] .rm-bullet { animation-play-state: paused !important; }
+.rm-offscreen .rm-card[data-current="true"] .rm-img,
+.rm-offscreen .rm-card[data-current="true"] .rm-status,
+.rm-offscreen .rm-card[data-current="true"] .rm-bullet { animation-play-state: paused !important; }
 
 /* Mobile-only (pointer: coarse) optimizations */
 @media (pointer: coarse) {
@@ -630,14 +644,14 @@ function RoadmapStyles() {
   .rm-sweep, .rm-noise, .rm-particle, .rm-bg-aurora { display: none !important; }
 
   /* One-time entrance fade/scale instead of infinite zoom */
-  .rm-card[data-active="true"] .rm-img { animation: rmImgEnter 0.6s ease-out forwards !important; }
+  .rm-card[data-current="true"] .rm-img { animation: rmImgEnter 0.6s ease-out forwards !important; }
 
   /* No infinite status pulse on mobile */
-  .rm-card[data-active="true"] .rm-status { animation: none !important; }
+  .rm-card[data-current="true"] .rm-status { animation: none !important; }
 
   /* Single-light box-shadow instead of multi-layer glow */
-  .rm-card[data-active="true"] .rm-card-inner { box-shadow: 0 0 18px rgba(var(--card-rgb), 0.22) !important; }
-  .rm-card:not([data-active="true"]) .rm-card-inner { box-shadow: 0 0 8px rgba(var(--card-rgb), 0.10) !important; }
+  .rm-card[data-current="true"] .rm-card-inner { box-shadow: 0 0 18px rgba(var(--card-rgb), 0.22) !important; }
+  .rm-card:not([data-current="true"]) .rm-card-inner { box-shadow: 0 0 8px rgba(var(--card-rgb), 0.10) !important; }
 
   /* Bullet text always visible — no entrance animation on mobile */
   .rm-bullet {
@@ -649,12 +663,12 @@ function RoadmapStyles() {
 
   /* Disable hover-only effects — touch devices don't hover */
   .rm-card:hover .rm-img { transform: none !important; }
-  .rm-card[data-active="true"]:hover .rm-card-inner { filter: none !important; }
+  .rm-card[data-current="true"]:hover .rm-card-inner { filter: none !important; }
 
   /* Pause remaining animations during drag/throw/snap */
-  .rm-dragging .rm-card[data-active="true"] .rm-img,
-  .rm-dragging .rm-card[data-active="true"] .rm-status,
-  .rm-dragging .rm-card[data-active="true"] .rm-bullet { animation-play-state: paused !important; }
+  .rm-dragging .rm-card[data-current="true"] .rm-img,
+  .rm-dragging .rm-card[data-current="true"] .rm-status,
+  .rm-dragging .rm-card[data-current="true"] .rm-bullet { animation-play-state: paused !important; }
 }
 `}</style>
   );
