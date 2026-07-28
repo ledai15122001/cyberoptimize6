@@ -87,6 +87,7 @@ interface CardFx { scale: Setter; rot: Setter; opacity: Setter; blur: Setter; gl
 type Mode = 'idle' | 'drag' | 'snap';
 
 export default function Roadmap() {
+  const sectionRef = useRef<HTMLElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const cardEls = useRef<(HTMLDivElement | null)[]>([]);
@@ -166,13 +167,15 @@ export default function Roadmap() {
 
     measure();
 
+    const isMobile = window.matchMedia('(pointer: coarse)').matches;
+
     fxRef.current = cardEls.current.map((card) => {
       if (!card) return null;
       return {
         scale: gsap.quickSetter(card, 'scale'),
         rot: gsap.quickSetter(card, 'rotationY', 'deg'),
         opacity: gsap.quickSetter(card, 'opacity'),
-        blur: gsap.quickSetter(card, 'filter'),
+        blur: isMobile ? (() => {}) : gsap.quickSetter(card, 'filter'),
         glow: gsap.quickSetter(card, '--glow'),
         z: gsap.quickSetter(card, 'z', 'px'),
       } as CardFx;
@@ -201,11 +204,11 @@ export default function Roadmap() {
     const drag = Draggable.create(track, {
       type: 'x',
       inertia: true,
-      edgeResistance: 0.92,
+      edgeResistance: isMobile ? 0.65 : 0.92,
       dragResistance: 0.02,
       minimumMovement: 3,
-      throwResistance: 1400,
-      allowNativeTouchScrolling: false,
+      throwResistance: isMobile ? 400 : 1400,
+      allowNativeTouchScrolling: isMobile,
       bounds: { minX: dimsRef.current.minX - 50, maxX: dimsRef.current.maxX + 50 },
       onPress: () => { snapTweenRef.current?.kill(); snapTweenRef.current = null; modeRef.current = 'drag'; },
       onDrag: () => { xRef.current = gsap.getProperty(track, 'x') as number; },
@@ -231,10 +234,28 @@ export default function Roadmap() {
     };
     window.addEventListener('resize', onResize);
 
+    // Pause rAF + CSS animations when section is offscreen
+    const section = sectionRef.current;
+    let visObs: IntersectionObserver | null = null;
+    if (section) {
+      visObs = new IntersectionObserver((entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting) {
+          section.classList.remove('rm-offscreen');
+          if (rafRef.current == null) rafRef.current = requestAnimationFrame(tick);
+        } else {
+          section.classList.add('rm-offscreen');
+          if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+        }
+      }, { threshold: 0.05 });
+      visObs.observe(section);
+    }
+
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       snapTweenRef.current?.kill();
       window.removeEventListener('resize', onResize);
+      visObs?.disconnect();
       drag.kill();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,7 +265,7 @@ export default function Roadmap() {
   const goNext = () => active < PHASES.length - 1 && snapTo(active + 1);
 
   return (
-    <section id="roadmap" className="relative overflow-hidden py-24">
+    <section id="roadmap" ref={sectionRef} className="relative overflow-hidden py-24">
       <RoadmapBackground />
 
       <div className="relative z-10 mb-12 text-center">
@@ -298,7 +319,7 @@ export default function Roadmap() {
       </div>
 
       {/* draggable viewport */}
-      <div ref={wrapRef} className="relative z-10 h-[640px] w-full overflow-hidden cursor-grab active:cursor-grabbing"
+      <div ref={wrapRef} className="rm-viewport relative z-10 h-[640px] w-full overflow-hidden cursor-grab active:cursor-grabbing"
         style={{ perspective: '1600px' }}>
         <div ref={trackRef} className="absolute top-0 left-0 flex h-full items-center"
           style={{ gap: `${GAP}px`, willChange: 'transform', transformStyle: 'preserve-3d' }}>
@@ -362,7 +383,7 @@ function RoadmapCard({ phase, active }: { phase: Phase; active: boolean }) {
       </div>
 
       {/* info panel */}
-      <div className="relative h-[35%] w-full px-7 py-6">
+      <div className="rm-info-panel relative h-[35%] w-full px-7 py-6">
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2">
@@ -389,7 +410,7 @@ function RoadmapCard({ phase, active }: { phase: Phase; active: boolean }) {
           ))}
         </ul>
 
-        <div className="absolute bottom-5 right-6 flex items-center gap-1.5 font-mono text-[10px] tracking-[0.25em]" style={{ color: hex }}>
+        <div className="rm-enter-sector absolute bottom-5 right-6 flex items-center gap-1.5 font-mono text-[10px] tracking-[0.25em]" style={{ color: hex }}>
           ENTER SECTOR <ArrowRight className="h-3.5 w-3.5" />
         </div>
       </div>
@@ -503,6 +524,30 @@ function RoadmapStyles() {
   .rm-bg-grid, .rm-bg-aurora, .rm-bg-particle, .rm-img-active, .rm-sweep,
   .rm-particle, .rm-status-pulse, .rm-bullet-in { animation: none !important; }
   .rm-bullet { opacity: 1; transform: none; }
+}
+
+/* Offscreen: pause all CSS animations to save GPU */
+.rm-offscreen .rm-bg-grid,
+.rm-offscreen .rm-bg-aurora,
+.rm-offscreen .rm-bg-particle,
+.rm-offscreen .rm-img-active,
+.rm-offscreen .rm-sweep,
+.rm-offscreen .rm-particle,
+.rm-offscreen .rm-status-pulse {
+  animation-play-state: paused !important;
+}
+
+/* Mobile-only (pointer: coarse) optimizations */
+@media (pointer: coarse) {
+  .rm-viewport { height: 480px !important; }
+  .rm-card { height: 440px !important; }
+  .rm-img-wrap { height: 55% !important; }
+  .rm-info-panel { height: 45% !important; padding-top: 14px !important; padding-bottom: 14px !important; }
+  .rm-card-inner { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  .rm-scanlines { mix-blend-mode: normal !important; }
+  .rm-bg-aurora { filter: blur(40px) !important; }
+  .rm-bg-grid { animation: none !important; }
+  .rm-enter-sector { position: static !important; justify-content: flex-end !important; padding-top: 8px !important; }
 }
 `}</style>
   );
